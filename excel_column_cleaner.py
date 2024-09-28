@@ -30,13 +30,46 @@ def get_user_data_directory():
 
 # Paths to your resources
 logo_path = resource_path("scribe-logo-final.png")
-icon_path = resource_path("scribe-icon-2.ico")
+icon_path = resource_path("scribe-icon.ico")
 unchecked_columns_path = os.path.join(get_user_data_directory(), "unchecked_columns.json")  # Save JSON in writable directory
 
 # Global variables to hold the DataFrame, input path, and list of saved files
 df = None
 input_path = None
 saved_files = []  # To track the list of files saved during the session
+unchecked_columns = []  # Initialize globally
+show_all_columns = True  # Toggle between showing all columns and hiding unchecked
+
+# Function to toggle the display of all columns or just checked ones
+def toggle_show_hide_columns():
+    global show_all_columns
+    # Save the current state of checkboxes before toggling
+    for column, var in checkbox_vars.items():
+        if var.get():
+            if column in unchecked_columns:
+                unchecked_columns.remove(column)
+        else:
+            if column not in unchecked_columns:
+                unchecked_columns.append(column)
+    
+    # Toggle the view state
+    show_all_columns = not show_all_columns
+    create_column_checkboxes(df.columns)
+
+def create_column_checkboxes(columns):
+    # Clear any previous checkboxes
+    for widget in columns_frame.winfo_children():
+        widget.destroy()
+
+    # Create checkboxes for each column
+    for column in columns:
+        # Re-create checkbox variables based on previous states
+        var = ctk.BooleanVar(value=True if column not in unchecked_columns else False)
+        checkbox_vars[column] = var
+
+        if show_all_columns or var.get():  # Show all columns or just checked ones
+            checkbox = ctk.CTkCheckBox(columns_frame, text=column, variable=var)
+            checkbox.pack(anchor="w", padx=10, pady=5)
 
 # Function to set column width using openpyxl
 def set_column_widths(output_path):
@@ -234,7 +267,7 @@ def get_selected_columns_and_process():
 
 # Function to upload the file and show columns for selection
 def upload_file_and_show_columns():
-    global input_path
+    global input_path, unchecked_columns
     input_path = filedialog.askopenfilename(
         title="Select Excel file",
         filetypes=[("Excel files", "*.xlsx")]
@@ -247,16 +280,8 @@ def upload_file_and_show_columns():
         # Load the previously unchecked columns
         unchecked_columns = load_unchecked_columns()
 
-        # Clear any previous checkboxes
-        for widget in columns_frame.winfo_children():
-            widget.destroy()
-
-        # Create checkboxes for each column
-        for column in df.columns:
-            var = ctk.BooleanVar(value=True if column not in unchecked_columns else False)
-            checkbox = ctk.CTkCheckBox(columns_frame, text=column, variable=var)
-            checkbox.pack(anchor="w", padx=10, pady=5)
-            checkbox_vars[column] = var
+        # Create the checkboxes for the columns
+        create_column_checkboxes(df.columns)
 
         # Enable the "Process File" button after file is loaded
         process_button.configure(state="normal")
@@ -304,17 +329,21 @@ browse_button.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
 process_button = ctk.CTkButton(root, text="Process File", font=("Arial", 14), command=get_selected_columns_and_process, state="disabled")
 process_button.grid(row=3, column=0, pady=10, padx=10, sticky="ew")
 
+# Show/Hide All Columns button to toggle between showing all columns and hiding unchecked
+toggle_button = ctk.CTkButton(root, text="Show/Hide All Columns", font=("Arial", 14), command=toggle_show_hide_columns)
+toggle_button.grid(row=4, column=0, pady=10, padx=10, sticky="ew")
+
 # Output label to display the file save paths or errors
 output_label = ctk.CTkLabel(root, text="", wraplength=250, font=("Arial", 12), justify="left")
-output_label.grid(row=4, column=0, pady=20)
+output_label.grid(row=5, column=0, pady=20)
 
 # Saved files label to display a running list of saved files
 saved_files_label = ctk.CTkLabel(root, text="Files saved in this session:\nNo files saved yet.", wraplength=250, font=("Arial", 12), justify="left")
-saved_files_label.grid(row=5, column=0, pady=20)
+saved_files_label.grid(row=6, column=0, pady=20)
 
 # Frame for column selection checkboxes with scrollable canvas
 columns_frame_container = ctk.CTkFrame(root)
-columns_frame_container.grid(row=1, column=1, rowspan=5, padx=20, pady=10, sticky="nsew")  # Adjust position to the right side
+columns_frame_container.grid(row=1, column=1, rowspan=6, padx=20, pady=10, sticky="nsew")  # Adjust position to the right side
 
 # Set the background color for the canvas
 canvas = ctk.CTkCanvas(columns_frame_container, width=160, bg='#e0e0e0')  # Grey background
