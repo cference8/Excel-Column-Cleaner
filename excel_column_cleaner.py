@@ -275,11 +275,11 @@ ctk.set_default_color_theme("blue")  # Options: "blue", "dark-blue", "green"
 
 # Create the main window
 root = ctk.CTk()
-root.geometry("600x800")
+root.geometry("600x600")
 root.title("Excel Column Cleaner")
 
 # Load the custom icon in .ico format (replace the default CustomTkinter icon)
-icon_path = resource_path('scribe-icon-2.ico')
+icon_path = resource_path('scribe-icon.ico')
 root.iconbitmap(icon_path)
 
 # Global variable to store checkboxes and their states
