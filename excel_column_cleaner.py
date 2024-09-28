@@ -1,0 +1,342 @@
+import pandas as pd
+import os
+import customtkinter as ctk
+from tkinter import filedialog, messagebox
+from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
+import json
+from PIL import Image
+import platform
+import subprocess
+from customtkinter import CTkImage
+import sys
+
+# Function to locate resource files, works for both PyInstaller executable and dev environment
+def resource_path(relative_path):
+    """ Get the absolute path to a resource, works for dev and for PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# Use the user's home directory or appdata folder for storing JSON
+def get_user_data_directory():
+    """Return a path to a writable directory for saving user data like the JSON file."""
+    home_dir = os.path.expanduser("~")
+    app_data_dir = os.path.join(home_dir, ".excel_cleaner")  # Hidden folder in the user's home
+    os.makedirs(app_data_dir, exist_ok=True)  # Create the directory if it doesn't exist
+    return app_data_dir
+
+# Paths to your resources
+logo_path = resource_path("scribe-logo-final.png")
+icon_path = resource_path("scribe-icon-2.ico")
+unchecked_columns_path = os.path.join(get_user_data_directory(), "unchecked_columns.json")  # Save JSON in writable directory
+
+# Global variables to hold the DataFrame, input path, and list of saved files
+df = None
+input_path = None
+saved_files = []  # To track the list of files saved during the session
+
+# Function to set column width using openpyxl
+def set_column_widths(output_path):
+    wb = load_workbook(output_path)
+    ws = wb.active
+
+    for column_cells in ws.columns:
+        max_length = 0
+        column_letter = column_cells[0].column_letter  # Get column letter (e.g., 'A', 'B')
+        for cell in column_cells:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+        adjusted_width = max_length + 2  # Add extra padding
+        ws.column_dimensions[column_letter].width = adjusted_width
+
+    wb.save(output_path)
+
+# Function to process a single file based on selected columns with color applied to "Custom Message" column when file contains "Nurture"
+def process_file(input_path, selected_columns, label):
+    try:
+        global df
+        if df is None:
+            df = pd.read_excel(input_path)
+
+        # Validate selected columns against the columns in the DataFrame
+        missing_columns = [col for col in selected_columns if col not in df.columns]
+        if missing_columns:
+            return f"Error: These columns are not in the file: {missing_columns}"
+
+        # Select the specified columns that exist
+        df_selected = df[selected_columns]
+
+        # Generate the output path by appending "- QC_CLEAN" to the file name
+        output_path = os.path.splitext(input_path)[0] + " - QC_CLEAN.xlsx"
+
+        # Save the dataframe to the output Excel file (initial save)
+        df_selected.to_excel(output_path, index=False)
+
+        # Check if the filename contains the word "Nurture"
+        if "Nurture" in input_path:
+            # Apply color formatting if the file contains "Nurture"
+            apply_color_to_custom_message(output_path)
+
+        # Adjust column widths after applying colors
+        set_column_widths(output_path)
+
+        # Return the output file path
+        return output_path
+
+    except Exception as e:
+        return f"An error occurred with {input_path}: {str(e)}"
+
+# Function to apply alternating colors to the "Custom Message" column whenever its content changes
+def apply_color_to_custom_message(output_path):
+    # Load the workbook and select the active worksheet
+    wb = load_workbook(output_path)
+    ws = wb.active
+
+    # Define alternating colors
+    colors = [
+        PatternFill(start_color="ef9854", end_color="ef9854", fill_type="solid"),  # Yellow
+        PatternFill(start_color="4c74a4", end_color="4c74a4", fill_type="solid")   # Magenta
+    ]
+
+    # Find the "Custom Message" column and apply color when the value changes
+    custom_message_col = None
+    for col in ws.iter_cols(1, ws.max_column, 1, 1):
+        if col[0].value == "Custom Message":
+            custom_message_col = col[0].column_letter
+            break
+
+    if custom_message_col:
+        previous_value = None
+        current_color_idx = 0
+        # Apply color row by row based on changes in "Custom Message"
+        for row_idx in range(2, ws.max_row + 1):  # Start at row 2 to skip header
+            cell_value = ws[f"{custom_message_col}{row_idx}"].value
+            if cell_value != previous_value:
+                current_color_idx = (current_color_idx + 1) % len(colors)  # Alternate colors
+            previous_value = cell_value
+            # Apply color to the entire row where "Custom Message" changes
+            for col_idx in range(1, ws.max_column + 1):
+                ws.cell(row=row_idx, column=col_idx).fill = colors[current_color_idx]
+
+    # Save the workbook with the color formatting
+    wb.save(output_path)
+
+# Function to set column widths using openpyxl after all changes are made
+def set_column_widths(output_path):
+    wb = load_workbook(output_path)
+    ws = wb.active
+
+    # Set the column width (you can adjust the width as needed)
+    for column_cells in ws.columns:
+        max_length = 0
+        column_letter = column_cells[0].column_letter  # Get column letter (e.g., 'A', 'B')
+        for cell in column_cells:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+        adjusted_width = max_length + 2  # Add extra padding
+        ws.column_dimensions[column_letter].width = adjusted_width
+
+    # Save the workbook with adjusted column widths
+    wb.save(output_path)
+
+
+
+# Function to save unchecked columns to a file (updated to keep unique values)
+def save_unchecked_columns(unchecked_columns, file_path=unchecked_columns_path):
+    existing_columns = load_unchecked_columns(file_path)
+    # Combine existing and new unchecked columns and keep unique values
+    all_unchecked_columns = list(set(existing_columns) | set(unchecked_columns))
+    
+    with open(file_path, "w") as file:
+        json.dump(all_unchecked_columns, file)
+
+# Function to load unchecked columns from a file (updated to load unique values)
+def load_unchecked_columns(file_path=unchecked_columns_path):
+    if os.path.exists(file_path):
+        with open(file_path, "r") as file:
+            return json.load(file)
+    return []
+
+# Function to clear the uploaded file and reset the column list in the GUI
+def clear_gui_after_processing():
+    global df, input_path, checkbox_vars
+    df = None
+    input_path = None
+
+    # Clear the checkboxes in the GUI
+    for widget in columns_frame.winfo_children():
+        widget.destroy()
+
+    # Clear the dictionary that tracks the state of checkboxes for each column
+    checkbox_vars.clear()
+
+    # Disable the process button
+    process_button.configure(state="disabled")
+
+# Function to update the saved files label with the current list
+def update_saved_files_label():
+    saved_files_text = "\n".join(saved_files) if saved_files else "No files saved yet."
+    saved_files_label.configure(text=f"Files saved in this session:\n{saved_files_text}\n _________________________")
+
+# Function to open file explorer in the directory of the output file
+def open_file_explorer(output_path):
+    try:
+        directory = os.path.dirname(output_path)
+        if platform.system() == "Windows":
+            os.startfile(directory)
+        elif platform.system() == "Darwin":  # macOS
+            subprocess.Popen(["open", directory])
+        else:  # Linux
+            subprocess.Popen(["xdg-open", directory])
+    except Exception as e:
+        messagebox.showerror("Error", f"Could not open file explorer: {str(e)}")
+
+# Function to get selected columns and process the file
+def get_selected_columns_and_process():
+    selected_columns = [col for col, var in checkbox_vars.items() if var.get()]
+    unchecked_columns = [col for col, var in checkbox_vars.items() if not var.get()]
+
+    if selected_columns:
+        global input_path
+        output_path = process_file(input_path, selected_columns, output_label)
+
+        if "Error" in output_path:
+            output_label.configure(text=output_path)
+        else:
+            # Display the file save location in the label
+            output_label.configure(text=f"File saved successfully at: {output_path}")
+
+            # Add the saved file to the running list
+            saved_files.append(output_path)
+
+            # Update the saved files label
+            update_saved_files_label()
+
+            # Open the file explorer in the directory of the saved file
+            open_file_explorer(output_path)
+
+        # Save unchecked columns (now it will preserve unique values)
+        save_unchecked_columns(unchecked_columns)
+
+        # Clear the uploaded file and reset the column list in the GUI after processing
+        clear_gui_after_processing()
+    else:
+        messagebox.showwarning("No columns selected", "Please select at least one column.")
+
+# Function to upload the file and show columns for selection
+def upload_file_and_show_columns():
+    global input_path
+    input_path = filedialog.askopenfilename(
+        title="Select Excel file",
+        filetypes=[("Excel files", "*.xlsx")]
+    )
+
+    if input_path:
+        global df
+        df = pd.read_excel(input_path)
+
+        # Load the previously unchecked columns
+        unchecked_columns = load_unchecked_columns()
+
+        # Clear any previous checkboxes
+        for widget in columns_frame.winfo_children():
+            widget.destroy()
+
+        # Create checkboxes for each column
+        for column in df.columns:
+            var = ctk.BooleanVar(value=True if column not in unchecked_columns else False)
+            checkbox = ctk.CTkCheckBox(columns_frame, text=column, variable=var)
+            checkbox.pack(anchor="w", padx=10, pady=5)
+            checkbox_vars[column] = var
+
+        # Enable the "Process File" button after file is loaded
+        process_button.configure(state="normal")
+
+        # Update the canvas scroll region
+        canvas.update_idletasks()
+        canvas.config(scrollregion=canvas.bbox("all"))
+
+# Function to handle mouse wheel scrolling
+def on_mousewheel(event):
+    canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+# Setting up the CustomTkinter GUI window
+ctk.set_appearance_mode("dark")  # Options: "light", "dark", "system"
+ctk.set_default_color_theme("blue")  # Options: "blue", "dark-blue", "green"
+
+# Create the main window
+root = ctk.CTk()
+root.geometry("600x800")
+root.title("Excel Column Cleaner")
+
+# Load the custom icon in .ico format (replace the default CustomTkinter icon)
+icon_path = resource_path('scribe-icon-2.ico')
+root.iconbitmap(icon_path)
+
+# Global variable to store checkboxes and their states
+checkbox_vars = {}
+
+# Adding the logo at the top of the window using CTkImage for HighDPI displays
+img = Image.open(logo_path)
+img_ctk = CTkImage(light_image=img, size=(258, 100))
+
+logo_label = ctk.CTkLabel(root, image=img_ctk, text="")
+logo_label.grid(row=0, column=0, columnspan=2, pady=10)
+
+# Input file selection label
+header_label = ctk.CTkLabel(root, text="Select the Excel file and columns to keep:", font=("Arial", 16, "bold"), wraplength=250)
+header_label.grid(row=1, column=0, pady=30)
+
+# Browse button to select files
+browse_button = ctk.CTkButton(root, text="Browse File", font=("Arial", 14), command=upload_file_and_show_columns)
+browse_button.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
+
+# Process button to generate the new file based on selected columns
+process_button = ctk.CTkButton(root, text="Process File", font=("Arial", 14), command=get_selected_columns_and_process, state="disabled")
+process_button.grid(row=3, column=0, pady=10, padx=10, sticky="ew")
+
+# Output label to display the file save paths or errors
+output_label = ctk.CTkLabel(root, text="", wraplength=250, font=("Arial", 12), justify="left")
+output_label.grid(row=4, column=0, pady=20)
+
+# Saved files label to display a running list of saved files
+saved_files_label = ctk.CTkLabel(root, text="Files saved in this session:\nNo files saved yet.", wraplength=250, font=("Arial", 12), justify="left")
+saved_files_label.grid(row=5, column=0, pady=20)
+
+# Frame for column selection checkboxes with scrollable canvas
+columns_frame_container = ctk.CTkFrame(root)
+columns_frame_container.grid(row=1, column=1, rowspan=5, padx=20, pady=10, sticky="nsew")  # Adjust position to the right side
+
+# Set the background color for the canvas
+canvas = ctk.CTkCanvas(columns_frame_container, width=160, bg='#e0e0e0')  # Grey background
+canvas.pack(side="left", fill="both", expand=True)
+
+scrollbar = ctk.CTkScrollbar(columns_frame_container, orientation="vertical", command=canvas.yview)
+scrollbar.pack(side="right", fill="y")
+
+canvas.configure(yscrollcommand=scrollbar.set)
+
+# Create an inner frame on the canvas with the same background color
+columns_frame = ctk.CTkFrame(canvas, bg_color='#e0e0e0')  # Grey background
+canvas_frame = canvas.create_window((0, 0), window=columns_frame, anchor="nw")
+
+# Bind mouse wheel scrolling to the canvas
+canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+# Adjust the grid weights for resizing
+root.grid_rowconfigure(0, weight=0)  # Logo row
+root.grid_rowconfigure(1, weight=1)  # Column selection row
+root.grid_columnconfigure(0, weight=1)  # Left side
+root.grid_columnconfigure(1, weight=1)  # Right side
+
+# Run the CustomTkinter event loop
+root.mainloop()
