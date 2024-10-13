@@ -10,6 +10,7 @@ import platform
 import subprocess
 from customtkinter import CTkImage
 import sys
+from random import randint
 
 # Function to locate resource files, works for both PyInstaller executable and dev environment
 def resource_path(relative_path):
@@ -97,12 +98,16 @@ def process_file(input_path, selected_columns, label):
         if df is None:
             df = pd.read_excel(input_path)
 
+        # Ensure the "Salutation" column is included, even if not selected by the user
+        if "Salutation" in df.columns and "Salutation" not in selected_columns:
+            selected_columns.append("Salutation")
+
         # Validate selected columns against the columns in the DataFrame
         missing_columns = [col for col in selected_columns if col not in df.columns]
         if missing_columns:
             return f"Error: These columns are not in the file: {missing_columns}"
 
-        # Select the specified columns that exist
+        # Select the specified columns that exist (including Salutation)
         df_selected = df[selected_columns]
 
         # Generate the output path by appending "- QC_CLEAN" to the file name
@@ -115,6 +120,9 @@ def process_file(input_path, selected_columns, label):
         if "Nurture" in input_path:
             # Apply color formatting if the file contains "Nurture"
             apply_color_to_custom_message(output_path)
+
+            # Apply color based on Salutation ID only if "Nurture" is in the filename
+            apply_color_based_on_salutation(output_path)
 
         # Adjust column widths after applying colors
         set_column_widths(output_path)
@@ -137,7 +145,7 @@ def apply_color_to_custom_message(output_path):
         PatternFill(start_color="4c74a4", end_color="4c74a4", fill_type="solid")   # Magenta
     ]
 
-    # Find the "Custom Message" column and apply color when the value changes
+    # Find the "Custom Message" column and apply color only to cells in this column when the value changes
     custom_message_col = None
     for col in ws.iter_cols(1, ws.max_column, 1, 1):
         if col[0].value == "Custom Message":
@@ -147,41 +155,76 @@ def apply_color_to_custom_message(output_path):
     if custom_message_col:
         previous_value = None
         current_color_idx = 0
-        # Apply color row by row based on changes in "Custom Message"
+        # Apply color to "Custom Message" column cells based on changes in the value
         for row_idx in range(2, ws.max_row + 1):  # Start at row 2 to skip header
             cell_value = ws[f"{custom_message_col}{row_idx}"].value
             if cell_value != previous_value:
                 current_color_idx = (current_color_idx + 1) % len(colors)  # Alternate colors
             previous_value = cell_value
-            # Apply color to the entire row where "Custom Message" changes
-            for col_idx in range(1, ws.max_column + 1):
-                ws.cell(row=row_idx, column=col_idx).fill = colors[current_color_idx]
+            # Apply color to the cell in the "Custom Message" column
+            ws[f"{custom_message_col}{row_idx}"].fill = colors[current_color_idx]
 
     # Save the workbook with the color formatting
     wb.save(output_path)
 
-# Function to set column widths using openpyxl after all changes are made
-def set_column_widths(output_path):
+# Function to generate unique colors for each Salutation ID
+def generate_unique_color():
+    """Generate a visually distinct light color."""
+    # Generate light colors by keeping the RGB values above a certain threshold
+    r = randint(150, 255)  # Higher values to ensure lighter colors
+    g = randint(150, 255)
+    b = randint(150, 255)
+
+    # Create the color in hexadecimal format
+    color_hex = f'{r:02X}{g:02X}{b:02X}'
+    
+    # Return a PatternFill with the light color
+    return PatternFill(
+        start_color=color_hex,
+        end_color=color_hex,
+        fill_type="solid"
+    )
+
+
+# Function to apply unique colors based on "Salutation" ID to selected columns
+def apply_color_based_on_salutation(output_path):
+    # Load the workbook and select the active worksheet
     wb = load_workbook(output_path)
     ws = wb.active
 
-    # Set the column width (you can adjust the width as needed)
-    for column_cells in ws.columns:
-        max_length = 0
-        column_letter = column_cells[0].column_letter  # Get column letter (e.g., 'A', 'B')
-        for cell in column_cells:
-            try:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            except:
-                pass
-        adjusted_width = max_length + 2  # Add extra padding
-        ws.column_dimensions[column_letter].width = adjusted_width
+    # Generate a unique color for each "Salutation" ID
+    salutation_colors = {}
+    salutation_col_letter = None
+    selected_columns_letters = []
 
-    # Save the workbook with adjusted column widths
+    # Find the "Salutation" column
+    for col in ws.iter_cols(1, ws.max_column, 1, 1):
+        if col[0].value == "Salutation":
+            salutation_col_letter = col[0].column_letter
+            break
+
+    if not salutation_col_letter:
+        raise ValueError("Salutation column not found.")
+
+    # Find selected columns (excluding "Custom Message")
+    for col in ws.iter_cols(1, ws.max_column, 1, 1):
+        if col[0].value != "Custom Message":
+            selected_columns_letters.append(col[0].column_letter)
+
+    # Loop through the rows to apply unique colors based on the "Salutation" ID
+    for row_idx in range(2, ws.max_row + 1):  # Start at row 2 to skip header
+        salutation_value = ws[f"{salutation_col_letter}{row_idx}"].value
+
+        if salutation_value not in salutation_colors:
+            # Assign a unique light color to each new Salutation ID
+            salutation_colors[salutation_value] = generate_unique_color()
+
+        # Apply the assigned color to all selected columns (excluding "Custom Message")
+        for col_letter in selected_columns_letters:
+            ws[f"{col_letter}{row_idx}"].fill = salutation_colors[salutation_value]
+
+    # Save the workbook with the applied color formatting
     wb.save(output_path)
-
-
 
 # Function to save unchecked columns to a file (updated to keep unique values)
 def save_unchecked_columns(unchecked_columns, file_path=unchecked_columns_path):
