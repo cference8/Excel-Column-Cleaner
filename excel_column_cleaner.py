@@ -338,7 +338,7 @@ def on_mousewheel(event):
     canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
 # Setting up the CustomTkinter GUI window
-ctk.set_appearance_mode("dark")  # Options: "light", "dark", "system"
+ctk.set_appearance_mode("light")  # Options: "light", "dark", "system"
 ctk.set_default_color_theme("blue")  # Options: "blue", "dark-blue", "green"
 
 # Create the main window
