@@ -372,8 +372,8 @@ browse_button.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
 process_button = ctk.CTkButton(root, text="Process File", font=("Arial", 14), command=get_selected_columns_and_process, state="disabled")
 process_button.grid(row=3, column=0, pady=10, padx=10, sticky="ew")
 
-# Show/Hide All Columns button to toggle between showing all columns and hiding unchecked
-toggle_button = ctk.CTkButton(root, text="Show/Hide All Columns", font=("Arial", 14), command=toggle_show_hide_columns)
+# Show/Hide Unchecked Columns button to toggle between showing all columns and hiding unchecked
+toggle_button = ctk.CTkButton(root, text="Show/Hide Unchecked Columns", font=("Arial", 14), command=toggle_show_hide_columns)
 toggle_button.grid(row=4, column=0, pady=10, padx=10, sticky="ew")
 
 # Output label to display the file save paths or errors
