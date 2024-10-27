@@ -121,6 +121,8 @@ def set_column_widths(output_path):
         print(f"Error setting column widths: {e}")
 
 # Function to process a single file based on selected columns with color applied to "Custom Message" column when file contains "Nurture"
+from tkinter import messagebox
+
 def process_file(input_path, selected_columns, label):
     try:
         global df
@@ -171,6 +173,11 @@ def process_file(input_path, selected_columns, label):
 
         # Return the output file path
         return output_path
+
+    except PermissionError:
+        # Show a dialog informing the user to close the file in Excel
+        messagebox.showerror("File Open in Excel", "File is open in Excel.\nPlease close the file opened in Excel before proceeding.")
+        return "Error: File is open in Excel."
 
     except Exception as e:
         traceback.print_exc()
@@ -361,12 +368,13 @@ def get_selected_columns_and_process():
 
             # Open the file explorer in the directory of the saved file
             open_file_explorer(output_path)
+            
+            # Clear the uploaded file and reset the column list in the GUI after processing
+            clear_gui_after_processing()
 
         # Save unchecked columns (now it will preserve unique values)
         save_unchecked_columns(unchecked_columns_local)
 
-        # Clear the uploaded file and reset the column list in the GUI after processing
-        clear_gui_after_processing()
     else:
         messagebox.showwarning("No columns selected", "Please select at least one column.")
         print("No columns selected by the user.")
@@ -383,6 +391,9 @@ def upload_file_and_show_columns():
         try:
             global df
             df = pd.read_excel(input_path)
+
+            # Update Excel file label
+            excel_file_label.configure(text=f"Excel file uploaded: {os.path.basename(input_path)}")
 
             # Load the previously unchecked columns
             unchecked_columns = load_unchecked_columns()
@@ -407,15 +418,30 @@ def upload_file_and_show_columns():
                 )
 
                 if pdf_path:
-                    # Use the base path provided
+                    # Update PDF file label
+                    pdf_file_label.configure(text=f"PDF file uploaded: {os.path.basename(pdf_path)}")
+                    
                     base_image_dir = r'G:\Shared drives\Scribe Workspace\Scribe Master Folder\Scribe Nurture\Scribe Intellicut Design Files\Nurture Image Previews'
-
                     # Sanitize the PDF file name to create a valid directory name
                     pdf_file_name = os.path.splitext(os.path.basename(pdf_path))[0]
                     pdf_file_name = sanitize_filename(pdf_file_name)
                     images_dir = os.path.join(base_image_dir, pdf_file_name)
 
-                    # Create the directory for images
+                    # Check if the directory already exists
+                    if os.path.exists(images_dir):
+                        # Prompt the user with a Yes/No dialog
+                        regenerate = messagebox.askyesno(
+                            "Images Already Exist",
+                            "That PDF file has already been converted to images. Would you like to regenerate the images?"
+                        )
+                        if not regenerate:
+                            # If user selects 'No', load existing images and update DataFrame
+                            existing_image_paths = [os.path.join(images_dir, f) for f in sorted(os.listdir(images_dir))]
+                            df['Image Path'] = existing_image_paths[:500]  # Use only first 500 images if more are present
+                            messagebox.showinfo("Images Loaded", "Existing images loaded successfully.")
+                            return
+
+                    # Create the directory for images if regeneration is needed
                     os.makedirs(images_dir, exist_ok=True)
 
                     # Show the progress bar and percentage label
@@ -588,45 +614,52 @@ else:
     logo_label.grid(row=0, column=0, columnspan=2, pady=10)
 
 # Input file selection label
-header_label = ctk.CTkLabel(root, text="Select the Excel file and columns to keep:", font=("Arial", 16, "bold"), wraplength=300)
+header_label = ctk.CTkLabel(root, text="Select the Excel file | columns to keep:", font=("Arial", 16, "bold"), wraplength=300)
 header_label.grid(row=1, column=0, pady=10, padx=10, sticky="w")
+
+# Additional labels to display uploaded file names
+excel_file_label = ctk.CTkLabel(root, text="No Excel file uploaded", font=("Arial", 12), justify="left")
+excel_file_label.grid(row=2, column=0, pady=5, padx=10, sticky="w")
+
+pdf_file_label = ctk.CTkLabel(root, text="No PDF file uploaded", font=("Arial", 12), justify="left")
+pdf_file_label.grid(row=3, column=0, pady=5, padx=10, sticky="w")
+pdf_file_label.grid_remove()
 
 # Browse button to select files
 browse_button = ctk.CTkButton(root, text="Browse File", font=("Arial", 14), command=upload_file_and_show_columns)
-browse_button.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
+browse_button.grid(row=4, column=0, pady=10, padx=10, sticky="ew")
 
 # Progress bar label
 progress_label = ctk.CTkLabel(root, text="Converting Single Card Design PDF to Images:", font=("Arial", 12), justify="left")
-progress_label.grid(row=3, column=0, pady=(10, 0), padx=10, sticky="w")
+progress_label.grid(row=5, column=0, pady=(10, 0), padx=10, sticky="w")
 progress_label.grid_remove()  # Hide initially
 
 # Progress bar widget
 progress_bar = ctk.CTkProgressBar(root, width=250)
-progress_bar.grid(row=4, column=0, pady=(0, 10), padx=10, sticky="w")
+progress_bar.grid(row=6, column=0, pady=(0, 10), padx=10, sticky="w")
 progress_bar.set(0)  # Initialize to 0%
 progress_bar.grid_remove()  # Hide initially
 
 # Progress percentage label
 progress_value_label = ctk.CTkLabel(root, text="0%", font=("Arial", 12), justify="left")
-progress_value_label.grid(row=4, column=1, pady=(0, 10), padx=(0,50), sticky="w")
+progress_value_label.grid(row=6, column=1, pady=(0, 10), padx=(0,50), sticky="w")
 progress_value_label.grid_remove()  # Hide initially
 
 # Process button to generate the new file based on selected columns
-process_button = ctk.CTkButton(root, text="Process File", font=("Arial", 14), command=get_selected_columns_and_process, state="disabled")
-process_button.grid(row=5, column=0, pady=10, padx=10, sticky="ew")
+process_button = ctk.CTkButton(root, text="Create Clean Excel File", font=("Arial", 14), command=get_selected_columns_and_process, state="disabled")
+process_button.grid(row=7, column=0, pady=10, padx=10, sticky="ew")
 
 # Show/Hide Unchecked Columns button
 toggle_button = ctk.CTkButton(root, text="Show/Hide Unchecked Columns", font=("Arial", 14), command=toggle_show_hide_columns)
-toggle_button.grid(row=6, column=0, pady=10, padx=10, sticky="ew")
-
+toggle_button.grid(row=8, column=0, pady=10, padx=10, sticky="ew")
 
 # Output label to display the file save paths or errors
-output_label = ctk.CTkLabel(root, text="", wraplength=400, font=("Arial", 12), justify="left")
-output_label.grid(row=7, column=0, pady=10, padx=10, sticky="w")
+output_label = ctk.CTkLabel(root, text="", wraplength=250, font=("Arial", 12), justify="left")
+output_label.grid(row=9, column=0, pady=10, padx=10, sticky="w")
 
 # Saved files label to display a running list of saved files
-saved_files_label = ctk.CTkLabel(root, text="Files saved in this session:\nNo files saved yet.", wraplength=400, font=("Arial", 12), justify="left")
-saved_files_label.grid(row=8, column=0, pady=10, padx=10, sticky="w")
+saved_files_label = ctk.CTkLabel(root, text="Files saved in this session:\nNo files saved yet.", wraplength=250, font=("Arial", 12), justify="left")
+saved_files_label.grid(row=10, column=0, pady=10, padx=10, sticky="w")
 
 # Frame for column selection checkboxes with scrollable canvas
 columns_frame_container = ctk.CTkFrame(root)
@@ -647,12 +680,14 @@ canvas.bind_all("<MouseWheel>", _on_mousewheel)
 root.grid_rowconfigure(0, weight=0)  # Logo row
 root.grid_rowconfigure(1, weight=1)  # Column selection row
 root.grid_rowconfigure(2, weight=1)
-root.grid_rowconfigure(3, weight=0)  # Progress label row
-root.grid_rowconfigure(4, weight=0)  # Progress bar row
-root.grid_rowconfigure(5, weight=1)
+root.grid_rowconfigure(3, weight=1)  
+root.grid_rowconfigure(4, weight=0)  # Progress label row
+root.grid_rowconfigure(5, weight=0)  # Progress bar row
 root.grid_rowconfigure(6, weight=1)
 root.grid_rowconfigure(7, weight=1)
 root.grid_rowconfigure(8, weight=1)
+root.grid_rowconfigure(9, weight=1)
+root.grid_rowconfigure(10, weight=1)
 root.grid_columnconfigure(0, weight=0)  # Left side
 root.grid_columnconfigure(1, weight=1)  # Right side
 
