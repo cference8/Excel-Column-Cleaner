@@ -1,22 +1,40 @@
-import pandas as pd
 import os
+import sys
+import subprocess
+
+# Save the original subprocess.Popen
+original_popen = subprocess.Popen
+
+def custom_popen(*args, **kwargs):
+    if sys.platform.startswith('win'):
+        # Add creationflags to suppress console window
+        if 'creationflags' in kwargs:
+            kwargs['creationflags'] |= subprocess.CREATE_NO_WINDOW
+        else:
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+    return original_popen(*args, **kwargs)
+
+# Monkey-patch subprocess.Popen globally
+subprocess.Popen = custom_popen
+
+import platform
+import threading
+import traceback
+import json
+import string
+from random import randint
+from io import BytesIO
+
+import pandas as pd
 import customtkinter as ctk
+from customtkinter import CTkImage
 from tkinter import filedialog, messagebox
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
-import json
 from PIL import Image
-import platform
-import subprocess
-from customtkinter import CTkImage
-import sys
-from random import randint
-from pdf2image import convert_from_path, convert_from_bytes
-import string
 import PyPDF2
-from io import BytesIO
-import traceback
-import threading
+import pdf2image  # Import after monkey-patching
+from pdf2image import convert_from_bytes
 
 # Function to locate resource files, works for both PyInstaller executable and dev environment
 def resource_path(relative_path):
@@ -313,6 +331,9 @@ def clear_gui_after_processing():
     df = None
     input_path = None
 
+    excel_file_label.grid_remove()
+    pdf_file_label.grid_remove()
+
     # Clear the checkboxes in the GUI
     for widget in columns_frame.winfo_children():
         widget.destroy()
@@ -381,6 +402,12 @@ def get_selected_columns_and_process():
 
 # Function to upload the file and show columns for selection
 def upload_file_and_show_columns():
+    # Clear labels when Browse is clicked
+    excel_file_label.configure(text="No Excel file uploaded")
+    pdf_file_label.configure(text="No PDF file uploaded")
+    pdf_file_label.grid_remove()  # Hide PDF label initially
+    progress_label.configure(text="")
+    progress_label.grid_remove()  # Hide progress label initially
     global input_path, unchecked_columns
     input_path = filedialog.askopenfilename(
         title="Select Excel file",
@@ -394,6 +421,7 @@ def upload_file_and_show_columns():
 
             # Update Excel file label
             excel_file_label.configure(text=f"Excel file uploaded: {os.path.basename(input_path)}")
+            excel_file_label.grid()
 
             # Load the previously unchecked columns
             unchecked_columns = load_unchecked_columns()
@@ -420,6 +448,7 @@ def upload_file_and_show_columns():
                 if pdf_path:
                     # Update PDF file label
                     pdf_file_label.configure(text=f"PDF file uploaded: {os.path.basename(pdf_path)}")
+                    pdf_file_label.grid()
                     
                     base_image_dir = r'G:\Shared drives\Scribe Workspace\Scribe Master Folder\Scribe Nurture\Scribe Intellicut Design Files\Nurture Image Previews'
                     # Sanitize the PDF file name to create a valid directory name
@@ -495,64 +524,75 @@ def handle_pdf_processing(pdf_path, images_dir):
         root.after(0, lambda: process_button.configure(state="normal"))
 
 # PDF TO IMAGE Functions
-def extract_images_from_pdf(pdf_path, output_folder, progress_callback=None):
-    import PyPDF2
-    from pdf2image import convert_from_bytes
-    from io import BytesIO
-
-    image_paths = []
-    idx = 0
-
-    # Open the PDF file and keep it open during processing
-    with open(pdf_path, 'rb') as f:
-        pdf_reader = PyPDF2.PdfReader(f)
-        total_pages = len(pdf_reader.pages)
-
-        # Calculate the total number of odd pages
-        total_odd_pages = (total_pages + 1) // 2
-
-        # Process odd-numbered pages (zero-based indexing: 0, 2, 4, ...)
-        for current, page_number in enumerate(range(0, total_pages, 2), start=1):
-            try:
-                pdf_writer = PyPDF2.PdfWriter()
-                pdf_writer.add_page(pdf_reader.pages[page_number])
-                
-                # Write the single page to a BytesIO object
-                pdf_bytes = BytesIO()
-                pdf_writer.write(pdf_bytes)
-                pdf_bytes.seek(0)
-                
-                # Convert the single-page PDF to an image
-                images = convert_from_bytes(pdf_bytes.read())
-                
-                for image in images:
-                    idx += 1
-                    image_filename = os.path.join(output_folder, f"image_{idx}.jpg")
-                    image.save(image_filename, 'JPEG')
-                    image_paths.append(image_filename)
-            
-                # Update progress
-                if progress_callback:
-                    progress = current / total_odd_pages  # Progress as a float between 0 and 1
-                    progress_callback(progress)
-            except Exception as e:
-                print(f"Error processing page {page_number + 1}: {e}")
-                continue  # Skip to the next page in case of an error
-
-    return image_paths
-
 def process_pdf(pdf_path, images_dir):
     def progress_callback(progress):
         # Schedule the progress bar update in the main thread
         root.after(0, update_progress_bar, progress)
 
     try:
-        image_paths = extract_images_from_pdf(pdf_path, images_dir, progress_callback)
+        # Update the Poppler path to match the packaged directory
+        poppler_path = resource_path('poppler')
+
+        # Optionally, print the poppler_path for debugging
+        print(f"Poppler path: {poppler_path}")
+        if not os.path.exists(poppler_path):
+            print("Poppler path does not exist in the packaged application.")
+
+        # Call the modified image extraction function
+        image_paths = extract_images_from_pdf(pdf_path, images_dir, poppler_path, progress_callback)
         return image_paths
     except Exception as e:
-        print(f"Error in thread: {e}")
+        print(f"Error in PDF processing: {e}")
         return None
 
+
+
+def extract_images_from_pdf(pdf_path, output_folder, poppler_path, progress_callback=None):
+    from PyPDF2 import PdfReader, PdfWriter
+    from pdf2image import convert_from_bytes
+    from io import BytesIO
+    import traceback
+
+    image_paths = []
+    idx = 0
+
+    try:
+        with open(pdf_path, 'rb') as f:
+            pdf_reader = PdfReader(f)
+            total_pages = len(pdf_reader.pages)
+
+            # Only process odd-numbered pages
+            total_odd_pages = (total_pages + 1) // 2
+
+            for current, page_number in enumerate(range(0, total_pages, 2), start=1):
+                try:
+                    pdf_writer = PdfWriter()
+                    pdf_writer.add_page(pdf_reader.pages[page_number])
+                    pdf_bytes = BytesIO()
+                    pdf_writer.write(pdf_bytes)
+                    pdf_bytes.seek(0)
+
+                    images = convert_from_bytes(pdf_bytes.read(), poppler_path=poppler_path)
+
+                    for image in images:
+                        idx += 1
+                        image_filename = os.path.join(output_folder, f"image_{idx}.jpg")
+                        image.save(image_filename, 'JPEG')
+                        image_paths.append(image_filename)
+
+                    if progress_callback:
+                        progress = current / total_odd_pages
+                        progress_callback(progress)
+                except Exception as page_error:
+                    print(f"Error processing page {page_number + 1}: {page_error}")
+                    traceback.print_exc()
+                    continue
+        return image_paths
+    except Exception as e:
+        print(f"Error extracting images from PDF: {e}")
+        traceback.print_exc()
+        return None
+        
 def update_progress_bar(progress):
     progress_bar.set(progress)  # Update the progress bar value
     percentage = int(progress * 100)
