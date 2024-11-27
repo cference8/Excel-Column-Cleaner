@@ -3,5 +3,3 @@ customtkinter
 openpyxl
 pillow
 platformdirs  # often used to complement platform-specific tasks
-pdf2image
-pypdf2
