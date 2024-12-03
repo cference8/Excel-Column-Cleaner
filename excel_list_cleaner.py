@@ -29,11 +29,6 @@ def get_user_data_directory():
     os.makedirs(app_data_dir, exist_ok=True)  # Create the directory if it doesn't exist
     return app_data_dir
 
-# Paths to your resources (adjusted to handle .webp and .png fallback)
-logo_path_webp = resource_path("scribe-logo-final.webp")
-logo_path_png = resource_path("scribe-logo-final.png")
-icon_path = resource_path("scribe-icon.ico")
-
 unchecked_columns_path = os.path.join(get_user_data_directory(), "unchecked_columns.json")  # Save JSON in writable directory
 
 # Global variables to hold the DataFrame, input path, and list of saved files
@@ -385,7 +380,7 @@ ctk.set_default_color_theme("blue")  # Options: "blue", "dark-blue", "green"
 # Create the main window
 root = ctk.CTk()
 root.geometry("600x600")
-root.title("Excel Spreadsheet Cleaner")
+root.title("Excel Optimizer")
 
 # Load the custom icon in .ico format (replace the default CustomTkinter icon)
 icon_path = resource_path('scribe-icon.ico')
@@ -393,6 +388,10 @@ root.iconbitmap(icon_path)
 
 # Global variable to store checkboxes and their states
 checkbox_vars = {}
+
+# Paths to your resources (adjusted to handle .webp and .png fallback)
+logo_path_webp = resource_path("scribe-logo-final.webp")
+logo_path_png = resource_path("scribe-logo-final.png")
 
 # Attempt to load the .webp image; fallback to .png if .webp is unavailable
 try:
