@@ -5,7 +5,7 @@ a = Analysis(
     ['excel_list_cleaner.py'],
     pathex=['.'],  # Specify the path if additional imports are in subdirectories
     binaries=[], 
-    datas=[('scribe-logo-final.png', '.'), ('scribe-icon.ico', '.')],  # data files like logo and icon
+    datas=[('scribe-logo-final.webp', '.'), ('scribe-logo-final.png', '.'), ('scribe-icon.ico', '.')],  # data files like logo and icon
     hiddenimports=[],  # include dependencies explicitly
     hookspath=[],
     hooksconfig={},

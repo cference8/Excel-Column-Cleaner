@@ -29,9 +29,11 @@ def get_user_data_directory():
     os.makedirs(app_data_dir, exist_ok=True)  # Create the directory if it doesn't exist
     return app_data_dir
 
-# Paths to your resources
-logo_path = resource_path("scribe-logo-final.png")
+# Paths to your resources (adjusted to handle .webp and .png fallback)
+logo_path_webp = resource_path("scribe-logo-final.webp")
+logo_path_png = resource_path("scribe-logo-final.png")
 icon_path = resource_path("scribe-icon.ico")
+
 unchecked_columns_path = os.path.join(get_user_data_directory(), "unchecked_columns.json")  # Save JSON in writable directory
 
 # Global variables to hold the DataFrame, input path, and list of saved files
@@ -383,7 +385,7 @@ ctk.set_default_color_theme("blue")  # Options: "blue", "dark-blue", "green"
 # Create the main window
 root = ctk.CTk()
 root.geometry("600x600")
-root.title("Excel List Cleaner")
+root.title("Excel Spreadsheet Cleaner")
 
 # Load the custom icon in .ico format (replace the default CustomTkinter icon)
 icon_path = resource_path('scribe-icon.ico')
@@ -392,11 +394,26 @@ root.iconbitmap(icon_path)
 # Global variable to store checkboxes and their states
 checkbox_vars = {}
 
-# Adding the logo at the top of the window using CTkImage for HighDPI displays
-img = Image.open(logo_path)
-img_ctk = CTkImage(light_image=img, size=(258, 100))
+# Attempt to load the .webp image; fallback to .png if .webp is unavailable
+try:
+    if os.path.exists(logo_path_webp):
+        img = Image.open(logo_path_webp)
+    elif os.path.exists(logo_path_png):
+        img = Image.open(logo_path_png)
+    else:
+        raise FileNotFoundError("Neither .webp nor .png logo file found.")
+except Exception as e:
+    print(f"Error loading logo: {e}")
+    img = None
 
-logo_label = ctk.CTkLabel(root, image=img_ctk, text="")
+if img:
+    img_ctk = CTkImage(light_image=img, size=(258, 100))
+    logo_label = ctk.CTkLabel(root, image=img_ctk, text="")
+else:
+    # If no image is loaded, use a default text placeholder
+    logo_label = ctk.CTkLabel(root, text="Logo Missing", font=("Arial", 16))
+
+# Add the logo label to the GUI
 logo_label.grid(row=0, column=0, columnspan=2, pady=10)
 
 # Input file selection label
@@ -408,7 +425,7 @@ file_name_label = ctk.CTkLabel(root, text="No file selected", font=("Arial", 12)
 file_name_label.grid(row=2, column=0, pady=5, padx=10, sticky="w")
 
 # Browse button to select files
-browse_button = ctk.CTkButton(root, text="Upload Excel File", font=("Arial", 14), command=upload_file_and_show_columns)
+browse_button = ctk.CTkButton(root, text="Select Excel File", font=("Arial", 14), command=upload_file_and_show_columns)
 browse_button.grid(row=3, column=0, pady=10, padx=10, sticky="ew")
 
 # Process button to generate the new file based on selected columns
