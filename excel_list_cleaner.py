@@ -289,11 +289,6 @@ def clear_gui_after_processing():
     # Disable the process button
     process_button.configure(state="disabled")
 
-# Function to update the saved files label with the current list
-def update_saved_files_label():
-    saved_files_text = "\n".join(saved_files) if saved_files else "No files saved yet."
-    saved_files_label.configure(text=f"Files saved in this session:\n{saved_files_text}\n _________________________")
-
 # Function to open file explorer in the directory of the output file
 def open_file_explorer(output_path):
     try:
@@ -307,6 +302,7 @@ def open_file_explorer(output_path):
     except Exception as e:
         messagebox.showerror("Error", f"Could not open file explorer: {str(e)}")
 
+# Updated function to process the selected columns
 def get_selected_columns_and_process():
     selected_columns = [col for col, var in checkbox_vars.items() if var.get()]
     unchecked_columns_local = [col for col, var in checkbox_vars.items() if not var.get()]
@@ -314,33 +310,32 @@ def get_selected_columns_and_process():
     if selected_columns:
         global input_path
         try:
+            # Process the file and get the output path
             output_path = process_file(input_path, selected_columns, output_label)
+            
             # Display the file save location in the label
             output_label.configure(text=f"File saved successfully at: {output_path}")
 
             # Add the saved file to the running list
             saved_files.append(output_path)
 
-            # Update the saved files label
-            update_saved_files_label()
-
-            # Open the file explorer in the directory of the saved file
-            open_file_explorer(output_path)
+            # Show the "Open Clean Excel File" button
+            show_open_file_button(output_path)
         except Exception as e:
             # Display the error message
             output_label.configure(text=str(e))
             print(f"Error during processing: {e}")
             messagebox.showerror("Error", str(e))
         finally:
-            # Save unchecked columns (now it will preserve unique values)
+            # Save unchecked columns
             save_unchecked_columns(unchecked_columns_local)
 
-            # Clear the uploaded file and reset the column list in the GUI after processing
+            # Reset the GUI for a new operation
             clear_gui_after_processing()
     else:
         messagebox.showwarning("No columns selected", "Please select at least one column.")
 
-# Function to upload the file and show columns for selection
+# Updated file upload function to reset the buttons
 def upload_file_and_show_columns():
     global input_path, unchecked_columns
     input_path = filedialog.askopenfilename(
@@ -362,8 +357,11 @@ def upload_file_and_show_columns():
         # Create the checkboxes for the columns
         create_column_checkboxes(df.columns)
 
-        # Enable the "Process File" button after file is loaded
+        # Enable the "Process File" button
         process_button.configure(state="normal")
+
+        # Hide the "Open Clean Excel File" button for the new operation
+        hide_open_file_button()
 
         # Update the canvas scroll region
         canvas.update_idletasks()
@@ -392,6 +390,16 @@ checkbox_vars = {}
 # Paths to your resources (adjusted to handle .webp and .png fallback)
 logo_path_webp = resource_path("scribe-logo-final.webp")
 logo_path_png = resource_path("scribe-logo-final.png")
+
+# Function to handle the "Open Clean Excel File" button visibility and action
+def show_open_file_button(output_path):
+    open_file_button.configure(
+        command=lambda: open_file_explorer(output_path)  # Open the directory
+    )
+    open_file_button.grid()  # Show the button
+
+def hide_open_file_button():
+    open_file_button.grid_remove()  # Hide the button
 
 # Attempt to load the .webp image; fallback to .png if .webp is unavailable
 try:
@@ -435,17 +443,24 @@ process_button.grid(row=4, column=0, pady=10, padx=10, sticky="ew")
 toggle_button = ctk.CTkButton(root, text="Show/Hide Unchecked Columns", font=("Arial", 14), command=toggle_show_hide_columns)
 toggle_button.grid(row=5, column=0, pady=10, padx=10, sticky="ew")
 
+# Create a hidden button for "Open Clean Excel File"
+open_file_button = ctk.CTkButton(
+    root, 
+    text="Open Clean Excel File", 
+    font=("Arial", 14), 
+    fg_color="green",  # Green color for emphasis
+    command=lambda: None  # Placeholder, updated dynamically
+)
+open_file_button.grid(row=6, column=0, pady=10, padx=10, sticky="ew")  # Position it
+open_file_button.grid_remove()  # Initially hide the button
+
 # Output label to display the file save paths or errors
 output_label = ctk.CTkLabel(root, text="", wraplength=250, font=("Arial", 12), justify="left")
-output_label.grid(row=6, column=0, pady=20)
-
-# Saved files label to display a running list of saved files
-saved_files_label = ctk.CTkLabel(root, text="Files saved in this session:\nNo files saved yet.", wraplength=250, font=("Arial", 12), justify="left")
-saved_files_label.grid(row=7, column=0, pady=20)
+output_label.grid(row=7, column=0, pady=20)
 
 # Frame for column selection checkboxes with scrollable canvas
 columns_frame_container = ctk.CTkFrame(root)
-columns_frame_container.grid(row=1, column=1, rowspan=6, padx=20, pady=10, sticky="nsew")  # Adjust position to the right side
+columns_frame_container.grid(row=1, column=1, rowspan=8, padx=20, pady=10, sticky="nsew")  # Adjust position to the right side
 
 # Set the background color for the canvas
 canvas = ctk.CTkCanvas(columns_frame_container, width=260)  # Grey background
