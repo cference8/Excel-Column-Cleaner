@@ -288,6 +288,9 @@ def clear_gui_after_processing():
 
     # Disable the process button
     process_button.configure(state="disabled")
+    
+    # Reset the scrollbar to the top
+    canvas.yview_moveto(0)  # Scrolls to the top
 
 # Function to open file explorer in the directory of the output file
 def open_file_explorer(output_path):
