@@ -21,15 +21,19 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
-# Use the user's home directory or appdata folder for storing JSON
-def get_user_data_directory():
-    """Return a path to a writable directory for saving user data like the JSON file."""
-    home_dir = os.path.expanduser("~")
-    app_data_dir = os.path.join(home_dir, ".excel_cleaner")  # Hidden folder in the user's home
-    os.makedirs(app_data_dir, exist_ok=True)  # Create the directory if it doesn't exist
-    return app_data_dir
+# Use the specified directory for storing JSON
+def get_data_directory():
+    """Return the specified directory for saving user data like the JSON file."""
+    # Specify the target directory
+    data_dir = r"G:\Shared drives\Scribe Workspace\Scribe Master Folder\Bulk Mailing Lists\Scribe List Cleaner"
+    
+    # Create the directory if it doesn't exist
+    os.makedirs(data_dir, exist_ok=True)
+    
+    return data_dir
 
-unchecked_columns_path = os.path.join(get_user_data_directory(), "unchecked_columns.json")  # Save JSON in writable directory
+# Update the path for the unchecked columns JSON file
+unchecked_columns_path = os.path.join(get_data_directory(), "unchecked_columns.json")  # Save JSON in the specified directory
 
 # Global variables to hold the DataFrame, input path, and list of saved files
 df = None
@@ -134,7 +138,7 @@ def process_file(input_path, selected_columns, label):
             # Process the "Outer Design File" column
             if "Outer Design File" in df_selected.columns:
                 # Wrap URLs in the "Outer Design File" column into Excel HYPERLINK formulas
-                for idx, url in df_selected["Outer Design File"].items():  # Changed iteritems() to items()
+                for idx, url in df_selected["Outer Design File"].items():
                     if pd.notna(url):
                         row_num = idx + 2  # Excel row number (starting from 2)
                         hyperlink_formula = f'=HYPERLINK("{url}", "Row {row_num} Image")'
@@ -160,9 +164,20 @@ def process_file(input_path, selected_columns, label):
         # Return the output file path
         return output_path
 
+    except PermissionError as e:
+        # Handle the case when the file is open and cannot be overwritten
+        if "Permission denied" in str(e):
+            file_name = os.path.basename(output_path)
+            label.configure(text=f"{file_name} is currently open. Please close it and try again.")
+            messagebox.showerror("File Open Error", f"{file_name} is currently open. \n Please close it and try again.")
+        else:
+            raise
+
     except Exception as e:
-        print(f"Exception in process_file: {e}")
-        raise Exception(f"An error occurred with {input_path}: {str(e)}")
+        # Handle other exceptions
+        label.configure(text=f"An error occurred with {input_path}: {str(e)}")
+        messagebox.showerror("Error", f"An error occurred: {str(e)}")
+        raise
 
 # Function to apply alternating colors to the "Custom Message" column whenever its content changes
 def apply_color_to_custom_message(output_path):
@@ -305,7 +320,6 @@ def open_file_explorer(output_path):
     except Exception as e:
         messagebox.showerror("Error", f"Could not open file explorer: {str(e)}")
 
-# Updated function to process the selected columns
 def get_selected_columns_and_process():
     selected_columns = [col for col, var in checkbox_vars.items() if var.get()]
     unchecked_columns_local = [col for col, var in checkbox_vars.items() if not var.get()]
@@ -315,7 +329,11 @@ def get_selected_columns_and_process():
         try:
             # Process the file and get the output path
             output_path = process_file(input_path, selected_columns, output_label)
-            
+
+            # If processing failed (returns None), stop execution
+            if not output_path:
+                return
+
             # Display the file save location in the label
             output_label.configure(text=f"File saved successfully at: {output_path}")
 
@@ -330,11 +348,13 @@ def get_selected_columns_and_process():
             print(f"Error during processing: {e}")
             messagebox.showerror("Error", str(e))
         finally:
-            # Save unchecked columns
-            save_unchecked_columns(unchecked_columns_local)
+            # Save unchecked columns only if processing was successful
+            if output_path:
+                save_unchecked_columns(unchecked_columns_local)
 
-            # Reset the GUI for a new operation
-            clear_gui_after_processing()
+            # Reset the GUI for a new operation only if processing was successful
+            if output_path:
+                clear_gui_after_processing()
     else:
         messagebox.showwarning("No columns selected", "Please select at least one column.")
 
@@ -397,9 +417,21 @@ logo_path_png = resource_path("scribe-logo-final.png")
 # Function to handle the "Open Clean Excel File" button visibility and action
 def show_open_file_button(output_path):
     open_file_button.configure(
-        command=lambda: open_file_explorer(output_path)  # Open the directory
+        command=lambda: open_created_file(output_path)  # Open the actual Excel file
     )
     open_file_button.grid()  # Show the button
+
+# Function to open the created file directly
+def open_created_file(file_path):
+    try:
+        if platform.system() == "Windows":
+            os.startfile(file_path)
+        elif platform.system() == "Darwin":  # macOS
+            subprocess.Popen(["open", file_path])
+        else:  # Linux
+            subprocess.Popen(["xdg-open", file_path])
+    except Exception as e:
+        messagebox.showerror("Error", f"Could not open the file: {str(e)}")
 
 def hide_open_file_button():
     open_file_button.grid_remove()  # Hide the button
