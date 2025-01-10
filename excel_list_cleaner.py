@@ -118,8 +118,8 @@ def process_file(input_path, selected_columns, label):
             df = pd.read_excel(input_path)
 
         # Ensure the "Salutation" column is included, even if not selected by the user
-        if "Salutation" in df.columns and "Salutation" not in selected_columns:
-            selected_columns.append("Salutation")
+        if "Salutation" in df.columns:
+            selected_columns = ["Salutation"] + [col for col in selected_columns if col != "Salutation"]
 
         # Ensure "Outer Design File" column is included if it exists
         if "Outer Design File" in df.columns and "Outer Design File" not in selected_columns:
@@ -144,18 +144,37 @@ def process_file(input_path, selected_columns, label):
                         hyperlink_formula = f'=HYPERLINK("{url}", "Row {row_num} Image")'
                         df_selected.at[idx, "Outer Design File"] = hyperlink_formula
 
+        # Check if the filename contains the word "Nurture"
+        if "nurture" in os.path.basename(input_path).lower():
+            # Calculate the total number of rows (excluding the header)
+            total_rows = len(df_selected)
+
+            # Generate reversed Record # values
+            record_numbers = (
+                pd.Series(range(total_rows, 0, -1))
+                .mod(250)
+                .replace(0, 250)
+            )
+
+            # Determine the midpoint for splitting into BIN ONE and BIN TWO
+            midpoint = total_rows // 2
+
+            # Assign BIN ONE and BIN TWO with Record #
+            df_selected["Record #"] = [
+                f"BIN TWO {num}" if idx < midpoint else f"BIN ONE {num}"
+                for idx, num in enumerate(record_numbers)
+            ]
+
+            
         # Generate the output path by appending "- QC_CLEAN" to the file name
         output_path = os.path.splitext(input_path)[0] + " - QC_CLEAN.xlsx"
 
         # Save the dataframe to the output Excel file (initial save)
         df_selected.to_excel(output_path, index=False)
 
-        # Check if the filename contains the word "Nurture"
+        # Apply color formatting if the file contains "Nurture"
         if "nurture" in os.path.basename(input_path).lower():
-            # Apply color formatting if the file contains "Nurture"
             apply_color_to_custom_message(output_path)
-
-            # Apply color based on Salutation ID only if "Nurture" is in the filename
             apply_color_based_on_salutation(output_path)
 
         # Adjust column widths after applying colors
@@ -165,16 +184,13 @@ def process_file(input_path, selected_columns, label):
         return output_path
 
     except PermissionError as e:
-        # Handle the case when the file is open and cannot be overwritten
         if "Permission denied" in str(e):
             file_name = os.path.basename(output_path)
             label.configure(text=f"{file_name} is currently open. Please close it and try again.")
             messagebox.showerror("File Open Error", f"{file_name} is currently open. \n Please close it and try again.")
         else:
             raise
-
     except Exception as e:
-        # Handle other exceptions
         label.configure(text=f"An error occurred with {input_path}: {str(e)}")
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
         raise
