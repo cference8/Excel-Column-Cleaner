@@ -25,7 +25,7 @@ def resource_path(relative_path):
 def get_data_directory():
     """Return the specified directory for saving user data like the JSON file."""
     # Specify the target directory
-    data_dir = r"G:\Shared drives\Scribe Workspace\Scribe Master Folder\Bulk Mailing Lists\Scribe List Cleaner"
+    data_dir = r"G:\Shared drives\Scribe Workspace\Scribe Master Folder\Scribe List Cleaner" # This needs to be changed if someone moves the folder.
     
     # Create the directory if it doesn't exist
     os.makedirs(data_dir, exist_ok=True)
